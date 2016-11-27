@@ -20,6 +20,18 @@ SoftwareSerial gpss(RXPin, TXPin);
 // the Radio object
 RF24 radio(7,8);
 
+
+// our struct to send stuff
+struct GPSinfo{
+  double latitude;    
+  double longitude; 
+  double speed; 
+  unsigned long course;
+  unsigned long altitude;
+};
+
+struct GPSinfo radioPackage;
+
 // husky is for GPS writing, sammy is for laptop writing
 byte addresses[][6] = {"1Node","2Node"};
 
@@ -31,7 +43,7 @@ void setup() {
   radio.begin();
   radio.setDataRate(RF24_250KBPS);
   radio.setChannel(108);
-  radio.setPALevel(RF24_PA_LOW); // we might need to do this or not
+  radio.setPALevel(RF24_PA_MAX); // we might need to do this or not
 
   // open radio pipes
   radio.openWritingPipe(addresses[1]);
@@ -62,17 +74,14 @@ void transmitInfo()
 
 //  unsigned long package = 0x0;
 //  if (gps.location.isValid())
-  
-    uint16_t lat = gps.location.rawLat().deg;
-    uint16_t lng = gps.location.rawLng().deg;
-    unsigned long package = (lat << 16) | lng;                             // put our stuff together into one package 
-  
-    Serial.println(package);
-    Serial.print(lat);
-    Serial.print(",");
-    Serial.println(lng);
+
+    radioPackage.latitude = gps.location.lat();
+    radioPackage.longitude = gps.location.lng();
+    radioPackage.speed = gps.speed.mph();
+    radioPackage.course = gps.course.value();
+    radioPackage.altitude = gps.altitude.value();
     
-   if (!radio.write(&package, sizeof(unsigned long)))
+   if (!radio.write(&radioPackage, sizeof(radioPackage)))
    {
      Serial.println(F("oopsies"));
    }

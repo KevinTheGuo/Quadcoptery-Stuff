@@ -18,6 +18,20 @@ TinyGPSPlus gps;
 SoftwareSerial gpss(RXPin, TXPin);
 */
 
+// our struct to send stuff
+struct GPSinfo{
+  double latitude;    
+  double longitude; 
+  double speed; 
+  unsigned long course;
+  unsigned long altitude;
+};
+
+struct GPSinfo radioPackage;
+
+// timer variable
+unsigned long previousMillis = 0;   // holds previous time we displayed
+
 // the Radio object
 RF24 radio(7,8);
 
@@ -32,7 +46,7 @@ void setup() {
   radio.begin();
   radio.setDataRate(RF24_250KBPS);
   radio.setChannel(108);
-  radio.setPALevel(RF24_PA_LOW); // we might need to do this or not
+  radio.setPALevel(RF24_PA_MAX); // we might need to do this or not
 
   // open radio pipes
 //  radio.openWritingPipe(addresses[0]);
@@ -45,28 +59,44 @@ void setup() {
 
 void loop() 
 {
-  unsigned long package;
   if(radio.available())
   {
-    Serial.println(F("We got something!"));
+  //  Serial.println(F("We got something!"));
     while(radio.available())
     {
-      radio.read(&package, sizeof(unsigned long));
+      radio.read(&radioPackage, sizeof(radioPackage));
     }
-    displayInfo(package);
   }
-}
 
-void displayInfo(unsigned long package)
-{
-  uint16_t lat = (package >> 16) & 0xFFFF;
-  uint16_t lng = package & 0xFFFF;
+  // holds current time
+    unsigned long currentMillis = millis();
+  // this will display if we haven't displayed for a second
+    if (currentMillis - previousMillis >= 1000)
+    {
+      // display!
+      Serial.print(F("Latitude: "));
+      Serial.print(radioPackage.latitude, 6);
+      Serial.print(F("  "));
 
-  Serial.print(F("Location: ")); 
-  Serial.print(lat);
-  Serial.print(F(",")); 
-  Serial.println(lng);
+      Serial.print(F("Longitude: "));
+      Serial.print(radioPackage.longitude, 6);
+      Serial.print(F("  "));
 
-  Serial.println(package);
+      Serial.print(F("Speed: "));
+      Serial.print(radioPackage.speed);
+      Serial.print(F(" mph  "));
+
+      double realCourse = radioPackage.course/100.0;
+      Serial.print(F("Course: "));
+      Serial.print(realCourse);
+      Serial.print(F(" degrees  "));
+
+      double realAltitude = radioPackage.altitude/100.0;
+      Serial.print(F("Altitude: "));
+      Serial.print(realAltitude);
+      Serial.println(F(" meters  "));
+
+      previousMillis = currentMillis;
+    }
 }
 
