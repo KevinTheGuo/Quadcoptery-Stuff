@@ -106,7 +106,22 @@ void transmitInfo()
     radioPackage.course = gps.course.value();
     radioPackage.altitude = gps.altitude.value();
     
-   if (!radio.write(&radioPackage, sizeof(radioPackage)))
+   if (radio.write(&radioPackage, sizeof(radioPackage)))
+   {
+      if(radio.available())    
+      {                             
+        while(radio.available())    // If an ack with payload was received
+        {                      
+              radio.read(&recievePackage, sizeof(recievePackage));                  // Read it, and display the response time
+        }
+        Serial.print(F("Got a response!!!!")); 
+      }
+      else    // If nothing in the buffer, we got an ack but it is blank
+      {
+        Serial.print(F("Got blank response")); 
+      }
+   }
+   else
    {
      Serial.println(F("transmitInfo didn't work"));
    }
@@ -161,7 +176,7 @@ void LCDupdate()
 
   // find our distance
   lcd.setCursor(13,1);
-  int realDist = distCalc(radioPackage.latitude, radioPackage.longitude, radioPackage.latitude, radioPackage.longitude); 
+  int realDist = distCalc(radioPackage.latitude, radioPackage.longitude, recievePackage.latitude, recievePackage.longitude); 
   lcd.print(realDist);
 
   // and print all our other stuff
@@ -175,6 +190,31 @@ void LCDupdate()
   lcd.print("HD");
   lcd.setCursor(10,1);
   lcd.print("DST");
+
+  // and do stuff on the serial monitor
+    Serial.print(F("Recieved info"));
+    
+    Serial.print(F("Latitude: "));
+    Serial.print(recievePackage.latitude, 6);
+    Serial.print(F("  "));
+
+    Serial.print(F("Longitude: "));
+    Serial.print(recievePackage.longitude, 6);
+    Serial.print(F("  "));
+
+    Serial.print(F("Speed: "));
+    Serial.print(recievePackage.speed);
+    Serial.print(F(" mph  "));
+
+    double realestCourse = recievePackage.course/100.0;
+    Serial.print(F("Course: "));
+    Serial.print(realestCourse);
+    Serial.print(F(" degrees  "));
+
+    double realestAltitude = recievePackage.altitude/100.0;
+    Serial.print(F("Altitude: "));
+    Serial.print(realestAltitude);
+    Serial.println(F(" meters  "));
 }
 
 double distCalc(double lat1, double lng1, double lat2, double lng2)

@@ -56,6 +56,7 @@ void setup() {
   radio.openWritingPipe(addresses[0]);
   radio.openReadingPipe(1,addresses[1]);
   radio.startListening();
+  radio.writeAckPayload(1,&displayPackage,sizeof(displayPackage));  
 
   // set up our GPS
   gpss.begin(GPSBaud);
@@ -75,7 +76,7 @@ void loop()
       displayPackage.altitude = gps.altitude.value();
     }
   }
-
+  
   recieveInfo();
 
   // holds current time
@@ -148,7 +149,9 @@ void loop()
 
 void recieveInfo()
 {
-  radio.startListening();
+  // update our ack package
+  radio.writeAckPayload(1,&displayPackage,sizeof(displayPackage));
+  
   if(radio.available())
   {
   //  Serial.println(F("We got something!"));
