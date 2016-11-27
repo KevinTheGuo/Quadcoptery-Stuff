@@ -28,6 +28,7 @@ RF24 radio(7,8);
 
 // timer variable
 unsigned long previousMillis = 0;   // holds previous time we displayed
+int transmitFailed = 0;
 
 // our struct to send stuff
 struct GPSinfo{
@@ -73,7 +74,7 @@ void loop() {
   {
     if (gps.encode(gpss.read()))
     {
-      transmitInfo();
+      Serial.println(F("We encoded our gps stuff"));
     }
   }
 
@@ -82,6 +83,7 @@ void loop() {
   if (currentMillis - previousMillis >= 1000)
   {
     LCDupdate();
+    transmitInfo();
     previousMillis = currentMillis;
   }
   
@@ -108,6 +110,7 @@ void transmitInfo()
     
    if (radio.write(&radioPackage, sizeof(radioPackage)))
    {
+      transmitFailed = 0;
       if(radio.available())    
       {                             
         while(radio.available())    // If an ack with payload was received
@@ -124,6 +127,7 @@ void transmitInfo()
    else
    {
      Serial.println(F("transmitInfo didn't work"));
+     transmitFailed = 1;
    }
 }
 
@@ -162,7 +166,18 @@ void LCDstart()
 }
 
 void LCDupdate()
-{
+{  
+  lcd.setCursor(3,0);
+  lcd.print("     ");
+  lcd.setCursor(11,0);
+  lcd.print("     ");
+  lcd.setCursor(3,1);
+  lcd.print("  ");
+  lcd.setCursor(7,1);
+  lcd.print("   ");
+  lcd.setCursor(13,1);
+  lcd.print("   ");
+  
   lcd.setCursor(3,0);
   lcd.print(radioPackage.longitude);
   lcd.setCursor(11,0);
@@ -176,9 +191,16 @@ void LCDupdate()
 
   // find our distance
   lcd.setCursor(13,1);
-  int realDist = distCalc(radioPackage.latitude, radioPackage.longitude, recievePackage.latitude, recievePackage.longitude); 
-  lcd.print(realDist);
-
+  if (transmitFailed)
+  {
+    lcd.print("N/A");
+  }
+  else
+  {
+    int realDist = distCalc(radioPackage.latitude, radioPackage.longitude, recievePackage.latitude, recievePackage.longitude);
+    lcd.print(realDist);
+  }
+  
   // and print all our other stuff
   lcd.home();
   lcd.print("LNG");
@@ -232,6 +254,10 @@ double distCalc(double lat1, double lng1, double lat2, double lng2)
     vA = sin(distLat/2) * sin(distLat/2) + cos(lat1) * cos(lat2) * sin(distLon/2) * sin(distLon/2);
     vC = 2 * atan2(sqrt(vA),sqrt(1-vA));
     distance = 6371 * vC;
+
+
+    Serial.print(F("Calculated dist is:  "));
+    Serial.println(distance*1000.0);
     return distance*1000.0;
 }
 

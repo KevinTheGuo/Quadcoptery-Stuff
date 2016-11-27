@@ -84,6 +84,9 @@ void loop()
   // this will display if we haven't displayed for a second
     if (currentMillis - previousMillis >= 1000)
     {
+      // update our ack package
+      radio.writeAckPayload(1,&displayPackage,sizeof(displayPackage));
+      
       // displaying the mobile unit coordinates
       Serial.print(F("Mobile Unit:   "));
       
@@ -157,8 +160,6 @@ void recieveInfo()
       radio.read(&radioPackage, sizeof(radioPackage));
     }
   }
-  // update our ack package
-  radio.writeAckPayload(1,&displayPackage,sizeof(displayPackage));
 }
 
 double distCalc(double lat1, double lng1, double lat2, double lng2)
