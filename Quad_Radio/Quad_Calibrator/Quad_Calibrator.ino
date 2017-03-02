@@ -1,20 +1,10 @@
-#include <TinyGPS++.h>
+#include <Servo.h>
 #include <SoftwareSerial.h>
 #include <SPI.h>
-#include "RF24.h"
 
 /* This sketch involves the transmitter (ground station) transmitting instructions to a second arduino to control
  *  the quadcopter
  */
-
-// const ints for the GPS pin
-static const int RXPin = 4, TXPin = 3;
-
-// the Radio object
-RF24 radio(7,8);
-
-// husky is for GPS writing, sammy is for laptop writing
-byte addresses[][6] = {"husky","sammy"};
 
 // our struct to send stuff
 struct dataPackage{
@@ -25,6 +15,13 @@ struct dataPackage{
   int aux1;
   int aux2;
 };
+
+Servo throttleIn;  // create servo object to control signals
+Servo rollIn;
+Servo pitchIn;
+Servo yawIn;
+Servo aux1In;
+
 struct dataPackage radioPackage;
 
 // random variables and stuff
@@ -34,12 +31,9 @@ unsigned long previousMillis = 0;   // holds previous time we stabilized
 int lastInput;    // variable to hold last input
 
 
-
-
-
 void setup() {
   Serial.begin(9600);
-  Serial.println(F("Welcome to the the Quad Transmitter"));
+  Serial.println(F("Welcome to the the Calibration Unit"));
   Serial.println(F("--------------------------------------------------------------------------------"));
   Serial.println(F("Throttle up-2, Throttle down-1, Aux1 up-4, Aux1 down-3"));
   Serial.println(F("High Throttle Mode-0, Low Throttle Mode-9"));
@@ -50,25 +44,21 @@ void setup() {
   Serial.println(F("Currently in auto-stabilization mode"));
 
   stableMode = 1;
-  
-  // set our radio stuff
-  radio.begin();
-  radio.setDataRate(RF24_250KBPS);
-  radio.setChannel(108);
-  radio.setPALevel(RF24_PA_MAX); // we might need to do this or not
 
-  // open radio pipes
-  radio.openWritingPipe(addresses[1]);
-//  radio.openReadingPipe(1,addresses[0]);
-  radio.stopListening();
 
   // and now setup our struct
-  radioPackage.throttle = 48;
+  radioPackage.throttle = 60;
   radioPackage.roll = 93;
   radioPackage.pitch = 93;
   radioPackage.yaw = 93;
-  radioPackage.aux1 = 95;
-  radioPackage.aux2 = 95;
+  radioPackage.aux1 = 93;
+  radioPackage.aux2 = 93;
+
+  throttleIn.attach(5);  // attach our stuff!
+  rollIn.attach(6);
+  pitchIn.attach(9);
+  yawIn.attach(10);
+  aux1In.attach(14);
 
 }
 
@@ -109,7 +99,7 @@ void loop()
     }
     else if (serialIn == 51)             // THIS IS "3"
     {
-      radioPackage.aux1 = radioPackage.aux1 - 5;
+      radioPackage.aux1 = radioPackage.aux1 - 3;
       if (lastInput == 51)
       {
         Serial.print(F("->"));
@@ -123,7 +113,7 @@ void loop()
     }
     else if (serialIn == 52)            // THIS IS "4"
     {
-      radioPackage.aux1 = radioPackage.aux1 + 5;
+      radioPackage.aux1 = radioPackage.aux1 + 3;
       if (lastInput == 52)
       {
         Serial.print(F("->"));
@@ -241,16 +231,16 @@ void loop()
     else if (serialIn == 48)
     {
         Serial.println(F(" "));
-        Serial.print(F("High Throttle Mode-> 150"));       
+        Serial.print(F("High Throttle Mode-> 145"));       
         radioPackage.throttle = 150;
     }
     else
     {
       Serial.print(F("EMERGENCY STOP initiated---- "));
-      radioPackage.throttle = radioPackage.throttle - 60;
+      radioPackage.throttle = radioPackage.throttle - 15;
       delay(500);
-      radioPackage.aux1 =  48;
-      radioPackage.throttle = 48;
+      radioPackage.aux1 =  60;
+      radioPackage.throttle = 60;
       Serial.println(F("EMERGENCY STOP finished"));
     }
   }
@@ -284,9 +274,9 @@ void loop()
   // now we send out info!
   // Serial.println(F("Sending our info"));
    
-  // now we are constantly sending our stuff
-   if (!radio.write(&radioPackage, sizeof(radioPackage)))
-   {
-     // Serial.print(F("oopsies"));
-   }
+    throttleIn.write(radioPackage.throttle);
+    rollIn.write(radioPackage.roll);
+    pitchIn.write(radioPackage.pitch);
+    yawIn.write(radioPackage.yaw);      
+    aux1In.write(radioPackage.aux1);
 }

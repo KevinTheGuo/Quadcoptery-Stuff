@@ -44,20 +44,8 @@ Servo aux1In;
 //  Servo aux2In;
 
 // const ints for the GPS pin
-// static const int RXPin = 4, TXPin = 3;
-// static const uint32_t GPSBaud = 9600;
-
-// The TinyGPS++ object
-// TinyGPSPlus gps;
-
-// The serial connection to the GPS device
-SoftwareSerial gpss(RXPin, TXPin);
-
-// the Radio object
-RF24 radio(7,8);
-
-// husky is for GPS writing, sammy is for laptop writing
-byte addresses[][6] = {"husky","sammy"};
+static const int RXPin = 4, TXPin = 3;
+static const uint32_t GPSBaud = 9600;
 
 // our struct
 struct dataPackage{
@@ -74,22 +62,9 @@ void setup() {
   Serial.begin(9600);
  // Serial.println(F("Welcome to the samoyed transceiving unit"));
 
-  // set our radio stuff
-  radio.begin();
-  radio.setDataRate(RF24_250KBPS);
-  radio.setChannel(108);
-//  radio.setPALevel(RF24_PA_MAX); // we might need to do this or not
 
-  // open radio pipes
-//  radio.openWritingPipe(addresses[0]);
-  radio.openReadingPipe(1,addresses[1]);
-  radio.startListening();
-
-  // set up our GPS
- // gpss.begin(GPSBaud);
-  
   // and now setup our struct
-  radioPackage.throttle = 48;
+  radioPackage.throttle = 140;
   radioPackage.roll = 93;
   radioPackage.pitch = 93;
   radioPackage.yaw = 93;
@@ -106,31 +81,20 @@ void setup() {
 
 void loop() 
 {
-/*  while (gpss.available() > 0)
-  {
-    if (gps.encode(gpss.read()))
-    {
-      Serial.println(F("We encoded our gps stuff"));
-    }
-  }
-  */
-  
-  if(radio.available())
-  {
-  //  Serial.println(F("We got something!"));
-    while(radio.available())
-    {
-      radio.read(&radioPackage, sizeof(radioPackage));
-    }
 
-    // write our stuff in if we have a change!
+    Serial.println(F("woo"));
+    Serial.print(radioPackage.throttle);
+    Serial.print(F("    "));
+    Serial.print(radioPackage.roll);
+    Serial.print(F("    "));
+    Serial.print(radioPackage.pitch);
+    Serial.print(F("    "));
+    Serial.print(radioPackage.yaw);
+    Serial.print(F("    "));
+    Serial.println(radioPackage.aux1);
 
-    throttleIn.write(radioPackage.throttle);
-    rollIn.write(radioPackage.roll);
-    pitchIn.write(radioPackage.pitch);
-    yawIn.write(radioPackage.yaw);      
-    aux1In.write(radioPackage.aux1);
-//    aux2In.write(radioPackage.aux2);   // no longer doing aux2 things
-  }
+    throttleIn.write(70);
+    rollIn.write(120);
+
 }
 

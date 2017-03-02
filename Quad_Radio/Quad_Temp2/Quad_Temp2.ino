@@ -44,8 +44,8 @@ Servo aux1In;
 //  Servo aux2In;
 
 // const ints for the GPS pin
-// static const int RXPin = 4, TXPin = 3;
-// static const uint32_t GPSBaud = 9600;
+static const int RXPin = 4, TXPin = 3;
+static const uint32_t GPSBaud = 9600;
 
 // The TinyGPS++ object
 // TinyGPSPlus gps;
@@ -86,10 +86,10 @@ void setup() {
   radio.startListening();
 
   // set up our GPS
- // gpss.begin(GPSBaud);
+//  gpss.begin(GPSBaud);
   
   // and now setup our struct
-  radioPackage.throttle = 48;
+  radioPackage.throttle = 140;
   radioPackage.roll = 93;
   radioPackage.pitch = 93;
   radioPackage.yaw = 93;
@@ -114,7 +114,19 @@ void loop()
     }
   }
   */
-  
+    Serial.println(F("woo"));
+    Serial.print(radioPackage.throttle);
+    Serial.print(F("    "));
+    Serial.print(radioPackage.roll);
+    Serial.print(F("    "));
+    Serial.print(radioPackage.pitch);
+    Serial.print(F("    "));
+    Serial.print(radioPackage.yaw);
+    Serial.print(F("    "));
+    Serial.println(radioPackage.aux1);
+
+    throttleIn.write(93);
+ /* 
   if(radio.available())
   {
   //  Serial.println(F("We got something!"));
@@ -130,7 +142,9 @@ void loop()
     pitchIn.write(radioPackage.pitch);
     yawIn.write(radioPackage.yaw);      
     aux1In.write(radioPackage.aux1);
+    
 //    aux2In.write(radioPackage.aux2);   // no longer doing aux2 things
   }
+  */
 }
 

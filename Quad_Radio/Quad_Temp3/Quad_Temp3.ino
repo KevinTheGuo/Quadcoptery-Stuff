@@ -51,7 +51,7 @@ Servo aux1In;
 // TinyGPSPlus gps;
 
 // The serial connection to the GPS device
-SoftwareSerial gpss(RXPin, TXPin);
+// SoftwareSerial gpss(RXPin, TXPin);
 
 // the Radio object
 RF24 radio(7,8);
@@ -89,7 +89,7 @@ void setup() {
  // gpss.begin(GPSBaud);
   
   // and now setup our struct
-  radioPackage.throttle = 48;
+  radioPackage.throttle = 150;
   radioPackage.roll = 93;
   radioPackage.pitch = 93;
   radioPackage.yaw = 93;
