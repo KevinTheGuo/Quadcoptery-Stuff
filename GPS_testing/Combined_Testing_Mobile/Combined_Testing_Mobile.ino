@@ -1,5 +1,6 @@
 #include <TinyGPS++.h>
 #include <SoftwareSerial.h>
+
 #include <SPI.h>
 #include <LCD.h>                  // LCD library
 #include <LiquidCrystal_I2C.h>    // another LCD library
@@ -8,6 +9,8 @@
 
 // random LCD stuff
 LiquidCrystal_I2C  lcd(0x3F,2,1,0,4,5,6,7); // 0x27 is the I2C bus address for an unmodified module
+// SDA -> A4
+// SCL -> A5
 
 /* This sketch involves two arduino units communicating to each other through the RF24 library. One unit sends its location to the other. 
  *  This particular sketch is for the transmitter unit

@@ -21,7 +21,7 @@
  *  3- top left (orange)
  *  10- top right (purple)
  *  11- bottom left (blue)
- *  12- bottom right (green)
+ *  9- bottom right (green)
  */
 
 // controls

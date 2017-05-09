@@ -137,7 +137,7 @@ void loop()
     }
     else if (serialIn == 113)            // THIS IS "q"
     {
-      radioPackage.roll = radioPackage.roll - 3;
+      radioPackage.roll = radioPackage.roll - 10;
       if (lastInput == 113)
       {
         Serial.print(F("->"));
@@ -151,7 +151,7 @@ void loop()
     }
     else if (serialIn == 101)            // THIS IS "e"
     {
-      radioPackage.roll = radioPackage.roll + 3;
+      radioPackage.roll = radioPackage.roll + 10;
       if (lastInput == 101)
       {
         Serial.print(F("->"));
@@ -165,7 +165,7 @@ void loop()
     }
     else if (serialIn == 119)            // THIS IS "w"
     {
-      radioPackage.pitch = radioPackage.pitch - 3;
+      radioPackage.pitch = radioPackage.pitch - 10;
       if (lastInput == 119)
       {
         Serial.print(F("->"));
@@ -179,7 +179,7 @@ void loop()
     }
     else if (serialIn == 115)            // THIS IS "s"
     {
-      radioPackage.pitch = radioPackage.pitch + 3;
+      radioPackage.pitch = radioPackage.pitch + 10;
       if (lastInput == 115)
       {
         Serial.print(F("->"));
@@ -193,7 +193,7 @@ void loop()
     }
     else if (serialIn == 97)            // THIS IS "a"
     {
-      radioPackage.yaw = radioPackage.yaw - 3;
+      radioPackage.yaw = radioPackage.yaw - 10;
       if (lastInput == 97)
       {
         Serial.print(F("->"));
@@ -207,7 +207,7 @@ void loop()
     }
     else if (serialIn == 100)            // THIS IS "d"
     {
-      radioPackage.yaw = radioPackage.yaw + 3;
+      radioPackage.yaw = radioPackage.yaw + 10;
       if (lastInput == 100)
       {
         Serial.print(F("->"));
@@ -261,7 +261,7 @@ void loop()
   // now we do our stabilizing
   unsigned long currentMillis = millis();
   
-  if ((stableMode) && (currentMillis - previousMillis >= 50)) // stabilize once every 20th of a second
+  if ((stableMode) && (currentMillis - previousMillis >= 10)) // stabilize once every 20th of a second
   {
     previousMillis = currentMillis;
     
