@@ -79,28 +79,21 @@ struct dataPackage radioPackage;
 
 // random variables and stuff
 int serialIn;   // creating variable to hold input signals
-int controlPaused;  // whether we're accepting hand-controller input or not
 
 void setup() {
-  Serial.begin(9600);
+  Serial.begin(38400);
   Serial.println(F("Welcome to the the Quad Controller"));
 
   // join I2C bus 
   Wire.begin();
-  Wire.setClock(4200);   // blazeit!
+  Wire.setClock(2000);   // blazeit!
   
   Serial.println(F("------------------------------------------------------------------------------------------------"));
   Serial.println(F("Rotate and tilt your hands to control the quadcopter! Use the slider to control the throttle "));
   Serial.println(F("Use keys 3/4 to control aux1. Use keys 5/6 to control aux2 "));
-  Serial.println(F("To pause/resume testing, press 'k' "));  
-  Serial.println(F("Press any key to start testing!"));
   Serial.println(F("To enter EMERGENCY SHUTDOWN mode, just mush any random non-command key while device is running"));
   Serial.println(F("------------------------------------------------------------------------------------------------"));
 
-  while (Serial.available() && Serial.read()); // empty buffer
-  while (!Serial.available());                 // wait for data
-  while (Serial.available() && Serial.read()); // empty buffer again
-  
   // initialize sensors!
   mpu.dmpInitialize();    // initialize our mpu with the dmp!
   mpu.setXGyroOffset(XGyroOffset);     // set offsets from test
@@ -115,7 +108,7 @@ void setup() {
   compass.setMeasurementMode(HMC5883L_CONTINOUS);  // Set measurement mode
   compass.setDataRate(HMC5883L_DATARATE_30HZ);  // Set data rate
   compass.setSamples(HMC5883L_SAMPLES_8);  // Set number of samples averaged
-  compass.setOffset(0, 0);   // Set calibration offset. See HMC5883L_calibration.ino    
+  compass.setOffset(-257, -23);   // Set calibration offset. See HMC5883L_calibration.ino   Format is (x,y)
 
   barometer.bmp085Calibration();        // calibrate our pressure sensor
   
@@ -140,13 +133,11 @@ void setup() {
 
   // and initialize the slide potentiometer! at A0
   pinMode(A0, INPUT);
-
-  Serial.println(F("Hand-controller currently paused. Press 'k' to resume"));
-  controlPaused = 1;
 }
 
 void loop() 
 {
+  Serial.print(F("(1)"));
     // first save our time
   currentMillis = millis();
 
@@ -159,7 +150,7 @@ void loop()
   Vector mag = compass.readNormalize();
   prevHeading = heading;
   heading = processHeading(mag);
-
+  Serial.print(F("(2)"));
   // grab MPU information
   fifoCount = mpu.getFIFOCount();     // get current FIFO count
   while (fifoCount < packetSize) fifoCount = mpu.getFIFOCount();        // wait for correct available data length
@@ -177,7 +168,7 @@ void loop()
   // currYaw = (ypr[0] * 180/M_PI);    // we have this information, but we discard it because the magnetometer is much nicer
   currPitch = (ypr[1] * 180/M_PI);    // flip pitch and roll because we upside down!
   currRoll = -(ypr[2] * 180/M_PI);    
-
+  Serial.print(F("(3)"));
   // check for serial input
   if (Serial.available() > 0)
   {
@@ -206,19 +197,6 @@ void loop()
       Serial.print(F("aux2 up to "));         
       Serial.print(radioPackage.aux2);
     }
-    else if (serialIn == 107)  
-    {
-      if(!controlPaused)
-      {
-        Serial.println(F("Temporarily pausing hand-controller. Press 'k' again to resume"));
-        controlPaused = 1;
-      }
-      else
-      {
-        Serial.println(F("Resuming hand-controller input. Press 'k' again to pause"));
-        controlPaused = 0;
-      }
-    }
     else if (serialIn > 31)
     {
       Serial.print(F("EMERGENCY STOP initiated-  "));
@@ -231,17 +209,14 @@ void loop()
       while(1);   // just freeze.
     }
   }
-
+  Serial.print(F("(4)"));
   // now we can translate our orientation to radio signals! do some quick maths
-  if(!controlPaused)
-  {
-    radioPackage.throttle = 130 - analogRead(A0)/10;      // read from analog 0
-    radioPackage.roll = (currRoll/2) + 93;
-    radioPackage.pitch = (currPitch/2) + 93;
-    radioPackage.heading = heading; 
-  }
-  
-  if((currentMillis - previousMillis) > 50)   // wait .1 seconds between displaying/transmitting
+  radioPackage.throttle = 150 - analogRead(A0)/10;      // read from analog 0
+  radioPackage.roll = (currRoll/2) + 93;
+  radioPackage.pitch = (currPitch/2) + 93;
+  radioPackage.heading = heading; 
+  Serial.print(F("(5)"));
+  if((currentMillis - previousMillis) > 100)   // wait .1 seconds between displaying/transmitting
   {
     Serial.print(F("throttle: "));
     Serial.print(radioPackage.throttle);    
@@ -251,8 +226,10 @@ void loop()
     Serial.print(radioPackage.pitch);
     Serial.print(F("  heading: "));
     Serial.println(radioPackage.heading);
+    Serial.print(F("(6)"));
     radio.write(&radioPackage, sizeof(radioPackage));
     previousMillis = currentMillis;
+    Serial.print(F("(7)"));
   }
 }
 

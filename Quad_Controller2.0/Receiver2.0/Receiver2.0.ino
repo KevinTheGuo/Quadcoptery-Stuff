@@ -1,12 +1,9 @@
 /* This sketch deals with a receiever, receiving instructions from a hand-controlled controller, which it will try
  *  to match the orientation of. pitch, roll, and heading are all taken into account. altitude coming soon!!
  */
-
+ 
 // includes for i2c and communication stuff
-#include "I2Cdev.h"
-#if I2CDEV_IMPLEMENTATION == I2CDEV_ARDUINO_WIRE
-    #include "Wire.h"
-#endif
+#include "Wire.h"
 
 // includes for GPS
 #include <TinyGPS++.h>
@@ -20,6 +17,13 @@
 #include "BMP085.h"
 #include "MPU6050_6Axis_MotionApps20.h"
 #include <HMC5883L.h>
+
+// SETTINGS WE MAY NEED TO CHANGE
+#define XGyroOffset      67
+#define YGyroOffset     -11
+#define ZGyroOffset      49
+#define ZAccelOffset     4594
+float declinationAngle = (-3.0 + (11.0 / 60.0)) / (180 / M_PI);   // this is declination angle for UIUC! Change if you are somewhere else.
 
 // includes for 'servo', AKA software PWM, to control the flight controller
 #include <Servo.h>
@@ -94,22 +98,27 @@ float ypr[3];           // [yaw, pitch, roll]   yaw/pitch/roll container and gra
 float currYaw, currPitch, currRoll, prevYaw, prevPitch, prevRoll;   // holds orientation
 
 // global variable for the magnetometer
-float heading, prevHeading;          //  holds current and prev heading
+float currHeading, prevHeading;          //  holds current and prev heading
 int antiGlitch = 5;     // check this flag to see how long we can keep throwing out bad values
 int desiredHeading;    // variables to control the quadcopter
+
+// TEMPORARY
+unsigned long currentMillis = 0; 
+unsigned long previousMillis = 0;
+int yawControl;
 
 // the Radio object
 RF24 radio(7,8);
 
-// husky is for GPS writing, sammy is for laptop writing
-byte addresses[][6] = {"husky","sammy"};
+// Declare addresses for radio transmission
+byte addresses[][6] = {"trans","recev"};
 
 // our struct
 struct dataPackage{
   int throttle;    
   int roll;
   int pitch;
-  int yaw;
+  int heading;
   int aux1;
   int aux2;
 };
@@ -117,16 +126,12 @@ struct dataPackage radioPackage;
 
 void setup() {
   Serial.begin(38400);
- // Serial.println(F("Welcome to receiever2.0"));
+  Serial.println(F("Welcome to the the Quad Receiver!"));
 
-     // join I2C bus (I2Cdev library doesn't do this automatically)
-  #if I2CDEV_IMPLEMENTATION == I2CDEV_ARDUINO_WIRE
-      Wire.begin();
-      TWBR = 24; // 400kHz I2C clock (200kHz if CPU is 8MHz)
-  #elif I2CDEV_IMPLEMENTATION == I2CDEV_BUILTIN_FASTWIRE
-      Fastwire::setup(400, true);
-  #endif
-
+  // join I2C bus 
+  Wire.begin();
+  Wire.setClock(4200);   // blazeit!
+  
   // set our radio stuff
   radio.begin();
   radio.setDataRate(RF24_250KBPS);
@@ -138,15 +143,15 @@ void setup() {
   radio.openReadingPipe(1,addresses[1]);
   radio.startListening();
 
-  // set up our GPS
+  // set up our GPS. Temporarily paused until we move all controls to hw PWM
  // gpss.begin(GPSBaud);
 
-   // initialize sensors!
-  mpu.dmpInitialize();    // initialize our mpu with the dmp!    DONT NEED MPU RIGHT NOW, PROBABLY NEVER WILL
-  mpu.setXGyroOffset(-157);     // set offsets from test
-  mpu.setYGyroOffset(84);
-  mpu.setZGyroOffset(29);
-  mpu.setZAccelOffset(411);
+  // initialize sensors!
+  mpu.dmpInitialize();    // initialize our mpu with the dmp!   DONT NEED MPU RIGHT NOW, PROBABLY NEVER WILL
+  mpu.setXGyroOffset(XGyroOffset);     // set offsets from test
+  mpu.setYGyroOffset(YGyroOffset);
+  mpu.setZGyroOffset(ZGyroOffset);
+  mpu.setZAccelOffset(ZAccelOffset);
   mpu.setDMPEnabled(true);    // enable our DMP!! this takes load off our arduino and gives nice results!
   packetSize = mpu.dmpGetFIFOPacketSize();    // get DMP packet size for later comparison
 
@@ -155,7 +160,7 @@ void setup() {
   compass.setMeasurementMode(HMC5883L_CONTINOUS);  // Set measurement mode
   compass.setDataRate(HMC5883L_DATARATE_30HZ);  // Set data rate
   compass.setSamples(HMC5883L_SAMPLES_8);  // Set number of samples averaged
-  compass.setOffset(0, 0);   // Set calibration offset. See HMC5883L_calibration.ino    
+  compass.setOffset(-20, -108);   // Set calibration offset. See HMC5883L_calibration.ino. Format is x,y
 
   barometer.bmp085Calibration();        // calibrate our pressure sensor
   
@@ -163,7 +168,7 @@ void setup() {
   radioPackage.throttle = 48;
   radioPackage.roll = 93;
   radioPackage.pitch = 93;
-  radioPackage.yaw = 93;
+  radioPackage.heading = 93;
   radioPackage.aux1 = 93;
   radioPackage.aux2 = 93;
 
@@ -193,8 +198,8 @@ void loop()
 
   // grab compass information
   Vector mag = compass.readNormalize();
-  prevHeading = heading;
-  heading = processHeading(mag);
+  prevHeading = currHeading;
+  currHeading = processHeading(mag);
 
   // grab MPU information
   fifoCount = mpu.getFIFOCount();     // get current FIFO count
@@ -211,33 +216,52 @@ void loop()
   
   if(radio.available())
   {
-  //  Serial.println(F("We got something!"));
-    while(radio.available())
+    //Serial.println(F("We got something!"));
+    if(radio.available())
     {
       radio.read(&radioPackage, sizeof(radioPackage));
     }
 
-    desiredHeading = radioPackage.yaw;    // we now have a new desired heading!
+    // calculate yaw change to match desired heading
+    desiredHeading = radioPackage.heading;    // we now have a new desired heading!
+    int headingDiff = getHeadingDiff(currHeading, radioPackage.heading);
+    if(abs(headingDiff) > 10)  // if difference > 10, then yaw!
+      yawControl = headingDiff/6 + 93;
+    else
+      yawControl = 93;    // otherwise, don't yaw
 
     // write our stuff in if we have a change!
     throttleIn.write(radioPackage.throttle);
     rollIn.write(radioPackage.roll);
     pitchIn.write(radioPackage.pitch);
-//    yawIn.write(radioPackage.yaw);      
+    yawIn.write(yawControl);      
     aux1In.write(radioPackage.aux1);
     aux2In.write(radioPackage.aux2);   
   }
 
-  // calculate yaw change to matrch desired heading
-  int testHeading = heading;
-  int headingDiff = ((testHeading - desiredHeading + 180 + 360)%360) - 180;   // calculate difference, but keep in mind degrees!
-  if(abs(headingDiff > 20))  // if difference > 30, then yaw!
+  currentMillis = millis();
+  if((currentMillis - previousMillis) > 100)   // wait .1 seconds between displaying
   {
-    int yawControl = headingDiff/4;
-    yawControl = yawControl + 93;
-    yawIn.write(yawControl);
+    Serial.print(F("throttle: "));
+    Serial.print(radioPackage.throttle);    
+    Serial.print(F("  roll: "));
+    Serial.print(radioPackage.roll);
+    Serial.print(F("  pitch: "));
+    Serial.print(radioPackage.pitch);
+    Serial.print(F("  desired heading: "));
+    Serial.print(desiredHeading);
+    Serial.print(F("  current heading: "));
+    Serial.print(currHeading);
+    Serial.print(F("  heading diff: "));
+    Serial.print(getHeadingDiff(currHeading, desiredHeading));
+    Serial.print(F("  yaw: "));
+    Serial.print(yawControl);
+    Serial.print(F("  aux1: "));
+    Serial.print(radioPackage.aux1);   
+    Serial.print(F("  aux2: "));
+    Serial.println(radioPackage.aux2);     
+    previousMillis = currentMillis;
   }
-  yawIn.write(93);    // otherwise, don't yaw
 }
 
 
@@ -251,11 +275,9 @@ float processHeading(Vector mag)
   roll = asin(-ypr[2]);   // we've got this info already from the dmp
   pitch = asin(ypr[1]);
 
-  if (roll > 0.78 || roll < -0.78 || pitch > 0.78 || pitch < -0.78)
-  {
+  if (roll > 0.6 || roll < -0.6 || pitch > 0.6 || pitch < -0.6)
     return prevHeading;
-  }
-  
+
     // Some of these are used twice, so rather than computing them twice in the algorithem we precompute them before hand.
   float cosRoll = cos(roll);  
   float sinRoll = sin(roll);  
@@ -269,7 +291,7 @@ float processHeading(Vector mag)
   float process_heading = atan2(Yh, Xh);
 
   // adjust for declination angle
-  float declinationAngle = (-3.0 + (11.0 / 60.0)) / (180 / M_PI);   // this is declination angle for uiuc!
+  declinationAngle = (-3.0 + (11.0 / 60.0)) / (180 / M_PI);   // this is declination angle for uiuc!
   process_heading += declinationAngle;
 
   process_heading = correctAngle(process_heading);    // correct angle for if its above 2pi or less than 0
@@ -292,15 +314,17 @@ float processHeading(Vector mag)
   int testHeading = process_heading;
   int oldHeading = prevHeading;
   int angleChange = ((testHeading - oldHeading + 180 + 360)%360) - 180;   // calculate difference, but keep in mind degrees!
-  if((angleChange > 75) && (antiGlitch < 5))  // if difference > 50 and we haven't been throwing out values too long..
+  if((angleChange > 60) && (antiGlitch < 5))  // if difference > 50 and we haven't been throwing out values too long..
   {
     process_heading = prevHeading;
     antiGlitch++;
   }
   else
-  {
     antiGlitch = 0;
-  }
+
+  // more often than not, a heading of 0 is erroneous. If it's 0, just make it previous heading.
+  if (process_heading == 0)
+    process_heading = prevHeading;
   
   return process_heading;   // return the smoothed, calibrated heading!
 }
@@ -312,5 +336,25 @@ float correctAngle(float process_heading)
   if (process_heading > 2 * PI) { process_heading -= 2 * PI; }
 
   return process_heading;
+}
+
+// Get a signed difference between two headings
+int getHeadingDiff(float initial, float dest)
+{
+  if (initial > 360 || initial < 0 || dest > 360 || dest < 0)
+  {
+    Serial.print(F("Heading Diff Error!"));
+    return 0;
+  }
+
+  int signed_diff = dest - initial;
+  int abs_diff = abs(dest - initial);
+
+  if (abs_diff <= 180)
+    return abs_diff == 180 ? abs_diff : signed_diff;
+  else if (dest-initial > 0)
+    return abs_diff - 360;
+  else
+    return 360 - abs_diff;
 }
 
