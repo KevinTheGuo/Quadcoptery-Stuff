@@ -247,9 +247,9 @@ void loop()
 
     // write our stuff in if we have a change!
     throttleIn.write(radioPackage.throttle);
-    rollIn.write(radioPackage.roll);
-    pitchIn.write(radioPackage.pitch);
-    yawIn.write(yawControl);      
+    rollIn.write(93);
+    pitchIn.write(93);
+    yawIn.write(93);      
     aux1In.write(radioPackage.aux1);
     aux2In.write(radioPackage.aux2);   
   }

@@ -74,13 +74,14 @@ struct dataPackage{
   int heading;
   int aux1;
   int aux2;
+  int checksum;
 };
 struct dataPackage radioPackage;
 
 // random variables and stuff
 int serialIn;   // creating variable to hold input signals
 
-void setup() {
+void setup() {  
   Serial.begin(38400);
   Serial.println(F("Welcome to the the Quad Controller"));
 
@@ -130,6 +131,7 @@ void setup() {
   radioPackage.heading = 0;
   radioPackage.aux1 = 95;
   radioPackage.aux2 = 95;
+  radioPackage.checksum = radioPackage.throttle + radioPackage.roll + radioPackage.pitch + radioPackage.heading + radioPackage.aux1 + radioPackage.aux2;  // literally sum
 
   // and initialize the slide potentiometer! at A0
   pinMode(A0, INPUT);
@@ -137,7 +139,7 @@ void setup() {
 
 void loop() 
 {
-  Serial.print(F("(1)"));
+//DBUG  Serial.print(F("(1)"));
     // first save our time
   currentMillis = millis();
 
@@ -150,7 +152,7 @@ void loop()
   Vector mag = compass.readNormalize();
   prevHeading = heading;
   heading = processHeading(mag);
-  Serial.print(F("(2)"));
+//DBUG  Serial.print(F("(2)"));
   // grab MPU information
   fifoCount = mpu.getFIFOCount();     // get current FIFO count
   while (fifoCount < packetSize) fifoCount = mpu.getFIFOCount();        // wait for correct available data length
@@ -168,7 +170,7 @@ void loop()
   // currYaw = (ypr[0] * 180/M_PI);    // we have this information, but we discard it because the magnetometer is much nicer
   currPitch = (ypr[1] * 180/M_PI);    // flip pitch and roll because we upside down!
   currRoll = -(ypr[2] * 180/M_PI);    
-  Serial.print(F("(3)"));
+//DBUG  Serial.print(F("(3)"));
   // check for serial input
   if (Serial.available() > 0)
   {
@@ -176,30 +178,34 @@ void loop()
     if (serialIn == 51)             // THIS IS "3"
     {
       radioPackage.aux1 = radioPackage.aux1 - 5;
-      Serial.print(F("aux1 down to "));      
+      Serial.print(F("AUX1 down to "));      
       Serial.println(radioPackage.aux1);
+      if (radioPackage.aux1 == 70)
+        Serial.println(F("QUADCOPTER IS NOW ARMED!"));    
     }
     else if (serialIn == 52)            // THIS IS "4"
     {
       radioPackage.aux1 = radioPackage.aux1 + 5;
-      Serial.print(F("aux1 up to "));         
-      Serial.print(radioPackage.aux1);
+      Serial.print(F("AUX1 up to "));         
+      Serial.println(radioPackage.aux1);
+      if (radioPackage.aux1 == 75)
+        Serial.println(F("QUADCOPTER IS NOW SAFE!"));    
     }
     else if (serialIn == 53)             // THIS IS "5"
     {
       radioPackage.aux2 = radioPackage.aux2 - 5;
-      Serial.print(F("aux2 down to "));      
+      Serial.print(F("AUX2 down to "));      
       Serial.println(radioPackage.aux2);
     }
     else if (serialIn == 54)            // THIS IS "6"
     {
       radioPackage.aux2 = radioPackage.aux2 + 5;
-      Serial.print(F("aux2 up to "));         
-      Serial.print(radioPackage.aux2);
+      Serial.print(F("AUX2 up to "));         
+      Serial.println(radioPackage.aux2);
     }
     else if (serialIn > 31)
     {
-      Serial.print(F("EMERGENCY STOP initiated-  "));
+      Serial.print(F("EMERGENCY STOP initiated. . .  "));
       radioPackage.throttle = radioPackage.throttle - 60;
       delay(500);
       radioPackage.aux1 =  30;
@@ -209,101 +215,34 @@ void loop()
       while(1);   // just freeze.
     }
   }
-  Serial.print(F("(4)"));
+//  Serial.print(F("(4)"));
   // now we can translate our orientation to radio signals! do some quick maths
   radioPackage.throttle = 150 - analogRead(A0)/10;      // read from analog 0
   radioPackage.roll = (currRoll/2) + 93;
   radioPackage.pitch = (currPitch/2) + 93;
   radioPackage.heading = heading; 
-  Serial.print(F("(5)"));
+//DBUG  Serial.print(F("(5)"));
+  
   if((currentMillis - previousMillis) > 100)   // wait .1 seconds between displaying/transmitting
   {
-    Serial.print(F("throttle: "));
+    Serial.print(F("Status: "));
+    if(radioPackage.aux1 < 75)
+      Serial.print(F("ARMED"));
+    else
+      Serial.print(F("SAFE"));
+    Serial.print(F("  Throttle: "));
     Serial.print(radioPackage.throttle);    
-    Serial.print(F("  roll: "));
+    Serial.print(F("  Roll: "));
     Serial.print(radioPackage.roll);
-    Serial.print(F("  pitch: "));
+    Serial.print(F("  Pitch: "));
     Serial.print(radioPackage.pitch);
-    Serial.print(F("  heading: "));
+    Serial.print(F("  Heading: "));
     Serial.println(radioPackage.heading);
-    Serial.print(F("(6)"));
+//DBUG    Serial.print(F("(6)")); 
+    radioPackage.checksum = radioPackage.throttle + radioPackage.roll + radioPackage.pitch + radioPackage.heading + radioPackage.aux1 + radioPackage.aux2;
     radio.write(&radioPackage, sizeof(radioPackage));
     previousMillis = currentMillis;
-    Serial.print(F("(7)"));
+//DBUG    Serial.print(F("(7)"));
   }
-}
-
-
-// tilt compensation, refining, and error scrubbing
-float processHeading(Vector mag)
-{  
-  // convert them to pitch and roll
-  float roll;
-  float pitch;
-
-  roll = asin(-ypr[2]);   // we've got this info already from the dmp
-  pitch = asin(ypr[1]);
-
-  if (roll > 0.6 || roll < -0.6 || pitch > 0.6 || pitch < -0.6)
-    return prevHeading;
-
-    // Some of these are used twice, so rather than computing them twice in the algorithem we precompute them before hand.
-  float cosRoll = cos(roll);  
-  float sinRoll = sin(roll);  
-  float cosPitch = cos(pitch);
-  float sinPitch = sin(pitch);
-  
-  // Tilt compensation
-  float Xh = mag.XAxis * cosPitch + mag.ZAxis * sinPitch;
-  float Yh = mag.XAxis * sinRoll * sinPitch + mag.YAxis * cosRoll - mag.ZAxis * sinRoll * cosPitch;
- 
-  float process_heading = atan2(Yh, Xh);
-
-  // adjust for declination angle
-  declinationAngle = (-3.0 + (11.0 / 60.0)) / (180 / M_PI);   // this is declination angle for uiuc!
-  process_heading += declinationAngle;
-
-  process_heading = correctAngle(process_heading);    // correct angle for if its above 2pi or less than 0
-  process_heading = process_heading * 180/M_PI;     // convert to degrees
-
-  // Fix magnetometer issue with angles to make it more accurate
-  float fixedHeadingDegrees;
-  if (process_heading >= 1 && process_heading < 240)
-  {
-    fixedHeadingDegrees = map(process_heading, 0, 239, 0, 179);
-  } else
-  if (process_heading >= 240)
-  {
-    fixedHeadingDegrees = map(process_heading, 240, 360, 180, 360);
-  }
-
-  process_heading = fixedHeadingDegrees;
-
-  // check for unusual values
-  int testHeading = process_heading;
-  int oldHeading = prevHeading;
-  int angleChange = ((testHeading - oldHeading + 180 + 360)%360) - 180;   // calculate difference, but keep in mind degrees!
-  if((angleChange > 60) && (antiGlitch < 5))  // if difference > 50 and we haven't been throwing out values too long..
-  {
-    process_heading = prevHeading;
-    antiGlitch++;
-  }
-  else
-    antiGlitch = 0;
-
-  // more often than not, a heading of 0 is erroneous. If it's 0, just make it previous heading.
-  if (process_heading == 0)
-    process_heading = prevHeading;
-  
-  return process_heading;   // return the smoothed, calibrated heading!
-}
-
-// Correct angle
-float correctAngle(float process_heading)
-{
-  if (process_heading < 0) { process_heading += 2 * PI; }
-  if (process_heading > 2 * PI) { process_heading -= 2 * PI; }
-
-  return process_heading;
 }
 
