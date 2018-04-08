@@ -240,8 +240,7 @@ void loop()
     desiredHeading = radioPackage.heading;    // we now have a new desired heading!
     int headingDiff = getHeadingDiff(currHeading, radioPackage.heading);
     if(abs(headingDiff) > 10)  // if difference > 10, then yaw!
-      //yawControl = headingDiff/6 + 93;
-      yawControl = 93;
+      yawControl = headingDiff/6 + 93;
     else
       yawControl = 93;    // otherwise, don't yaw
 
