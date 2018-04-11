@@ -6,7 +6,6 @@
  *  SDA from MPU- A4
  *  SCL from MPU- A5
  */
-
 // includes for i2c and communication stuff
 #include "Wire.h"
 
@@ -73,13 +72,14 @@ struct dataPackage{
   int pitch;
   int heading;
   int aux1;
-  int aux2;
+  int info;   // NOTE: aux2 currently not being forwarded to multiwii. possible use as another control signal?
   int checksum;
 };
 struct dataPackage radioPackage;
 
 // random variables and stuff
 int serialIn;   // creating variable to hold input signals
+
 
 void setup() {  
   Serial.begin(38400);
@@ -124,14 +124,14 @@ void setup() {
 //  radio.openReadingPipe(1,addresses[0]);
   radio.stopListening();
 
-  // and now setup our struct with default values
-  radioPackage.throttle = 50;
-  radioPackage.roll = 93;
-  radioPackage.pitch = 93;
+  // and now setup our struct with default values. The range is 125-250
+  radioPackage.throttle = 0;
+  radioPackage.roll = 185;
+  radioPackage.pitch = 185;
   radioPackage.heading = 0;
-  radioPackage.aux1 = 95;
-  radioPackage.aux2 = 95;
-  radioPackage.checksum = radioPackage.throttle + radioPackage.roll + radioPackage.pitch + radioPackage.heading + radioPackage.aux1 + radioPackage.aux2;  // literally sum
+  radioPackage.aux1 = 185;
+  radioPackage.info = 0;
+  radioPackage.checksum = radioPackage.throttle + radioPackage.roll + radioPackage.pitch + radioPackage.heading + radioPackage.aux1 + radioPackage.info;  // literally sum
 
   // and initialize the slide potentiometer! at A0
   pinMode(A0, INPUT);
@@ -175,41 +175,29 @@ void loop()
   if (Serial.available() > 0)
   {
     serialIn = Serial.read();
-    if (serialIn == 51)             // THIS IS "3"
+    if (serialIn == '3')             // 51 THIS IS "3" 
     {
       radioPackage.aux1 = radioPackage.aux1 - 5;
       Serial.print(F("AUX1 down to "));      
       Serial.println(radioPackage.aux1);
-      if (radioPackage.aux1 == 70)
+      if (radioPackage.aux1 == 160)
         Serial.println(F("QUADCOPTER IS NOW ARMED!"));    
     }
-    else if (serialIn == 52)            // THIS IS "4"
+    else if (serialIn == '4')            // 52 THIS IS "4"
     {
       radioPackage.aux1 = radioPackage.aux1 + 5;
       Serial.print(F("AUX1 up to "));         
       Serial.println(radioPackage.aux1);
-      if (radioPackage.aux1 == 75)
+      if (radioPackage.aux1 == 165)
         Serial.println(F("QUADCOPTER IS NOW SAFE!"));    
     }
-    else if (serialIn == 53)             // THIS IS "5"
-    {
-      radioPackage.aux2 = radioPackage.aux2 - 5;
-      Serial.print(F("AUX2 down to "));      
-      Serial.println(radioPackage.aux2);
-    }
-    else if (serialIn == 54)            // THIS IS "6"
-    {
-      radioPackage.aux2 = radioPackage.aux2 + 5;
-      Serial.print(F("AUX2 up to "));         
-      Serial.println(radioPackage.aux2);
-    }
-    else if (serialIn > 31)
+    else if (serialIn > 31)             // any other number
     {
       Serial.print(F("EMERGENCY STOP initiated. . .  "));
-      radioPackage.throttle = radioPackage.throttle - 60;
+      radioPackage.throttle = radioPackage.throttle - 20;
       delay(500);
-      radioPackage.aux1 =  30;
-      radioPackage.throttle = 30;
+      radioPackage.aux1 =  240;
+      radioPackage.throttle = 130;
       radio.write(&radioPackage, sizeof(radioPackage));
       Serial.println(F("EMERGENCY STOP finished. Restart device to gain control again."));
       while(1);   // just freeze.
@@ -217,16 +205,23 @@ void loop()
   }
 //  Serial.print(F("(4)"));
   // now we can translate our orientation to radio signals! do some quick maths
-  radioPackage.throttle = 150 - analogRead(A0)/10;      // read from analog 0
-  radioPackage.roll = (currRoll/2) + 93;
-  radioPackage.pitch = (currPitch/2) + 93;
+  int throttleIn = analogRead(A0);  // read from analog 0
+  if (throttleIn > 900)             // At high levels, it will taper out, so alleviate that a bit
+  {
+    radioPackage.throttle = analogRead(A0)/5 + 55;      
+    Serial.println("high levels!");
+  }
+  else
+    radioPackage.throttle = analogRead(A0)/10 + 135;
+  radioPackage.roll = currRoll/2 + 185;
+  radioPackage.pitch = currPitch/2 + 185;
   radioPackage.heading = heading; 
 //DBUG  Serial.print(F("(5)"));
   
   if((currentMillis - previousMillis) > 100)   // wait .1 seconds between displaying/transmitting
   {
     Serial.print(F("Status: "));
-    if(radioPackage.aux1 < 75)
+    if(radioPackage.aux1 < 165)
       Serial.print(F("ARMED"));
     else
       Serial.print(F("SAFE"));
@@ -239,7 +234,7 @@ void loop()
     Serial.print(F("  Heading: "));
     Serial.println(radioPackage.heading);
 //DBUG    Serial.print(F("(6)")); 
-    radioPackage.checksum = radioPackage.throttle + radioPackage.roll + radioPackage.pitch + radioPackage.heading + radioPackage.aux1 + radioPackage.aux2;
+    radioPackage.checksum = radioPackage.throttle + radioPackage.roll + radioPackage.pitch + radioPackage.heading + radioPackage.aux1 + radioPackage.info;
     radio.write(&radioPackage, sizeof(radioPackage));
     previousMillis = currentMillis;
 //DBUG    Serial.print(F("(7)"));

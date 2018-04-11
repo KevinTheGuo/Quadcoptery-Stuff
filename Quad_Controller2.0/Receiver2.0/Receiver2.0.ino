@@ -25,58 +25,41 @@
 #define ZAccelOffset     4594
 float declinationAngle = (-3.0 + (11.0 / 60.0)) / (180 / M_PI);   // this is declination angle for UIUC! Change if you are somewhere else.
 
-// includes for 'servo', AKA software PWM, to control the flight controller
-#include <Servo.h>
 
-/*
- *  The pinout is like this:
+/*  PINOUT
+ *  
+ *  Multiwii:
  *  THROTTLE- pin 5 (yellow)
  *  ROLL(aileron)- pin 6 (green)
  *  PITCH(elevator)- pin 9 (blue)
  *  YAW(rudder)- pin 10 (purple)
- *  AUX1- pin 14/A0 (white)
- *  AUX2- pin 15/A1 (grey)
+ *  AUX1- pin 3 (white)
  *  
+ *  Radio:
+ *  CE- pin 7 (orange)
+ *  CSN- pin 8 (yellow)
+ *  SCK- pin 13 (green)
+ *  MOSI- pin 11 (blue)
+ *  MISO- pin 12 (purple)
  *  
- *  MULTIWII ARDUINO CONNECTIONS
- *  from IMU perspective-
- *  3- top left (orange)
- *  10- top right (purple)
- *  11- bottom left (blue)
- *  9- bottom right (green)
  */
 
-// controls
-// throttle up "1"
-// throttle down "2"
-// roll right "e"
-// roll left "q"
-// pitch forward "w"
-// pitch backward "s"
-// yaw right "d"
-// yaw left "a"
-// all of the above are OBSOLETE
-// aux1 increase "4"
-// aux1 decrease "3"
-// aux2 increase "5"
-// aux2 decrease "6"
-
-Servo throttleIn;  // create servo object to control signals
-Servo rollIn;
-Servo pitchIn;
-Servo yawIn;
-Servo aux1In;
-Servo aux2In;
+ // Define pin variables
+#define THROTTLE_PIN 5
+#define ROLL_PIN     6
+#define PITCH_PIN    9
+#define YAW_PIN      10
+#define AUX1_PIN     3
 
 // const ints for the GPS pin
-// static const int RXPin = 4, TXPin = 3;
-// static const uint32_t GPSBaud = 9600;
+static const int RXPin = 4, TXPin = 3;
+static const uint32_t GPSBaud = 9600;
 
 // The TinyGPS++ object
-// TinyGPSPlus gps;
+TinyGPSPlus gps;
 
 // The serial connection to the GPS device
-// SoftwareSerial gpss(RXPin, TXPin);
+SoftwareSerial gpss(RXPin, TXPin);
 
 // initialize objects for each of our sensors
 BMP085 barometer;
@@ -123,7 +106,7 @@ struct dataPackage{
   int pitch;
   int heading;
   int aux1;
-  int aux2;
+  int info;   // NOTE: aux2 currently not being forwarded to multiwii. possible use as another control signal?
   int checksum;
 };
 struct dataPackage radioPackage;
@@ -148,7 +131,7 @@ void setup() {
   radio.startListening();
 
   // set up our GPS. Temporarily paused until we move all controls to hw PWM
- // gpss.begin(GPSBaud);
+  gpss.begin(GPSBaud);
 
   // initialize sensors!
   mpu.dmpInitialize();    // initialize our mpu with the dmp!   DONT NEED MPU RIGHT NOW, PROBABLY NEVER WILL
@@ -168,36 +151,39 @@ void setup() {
 
   barometer.bmp085Calibration();        // calibrate our pressure sensor
   
-  // and now setup our struct
-  radioPackage.throttle = 48;
-  radioPackage.roll = 93;
-  radioPackage.pitch = 93;
+  // and now setup our struct with default values. The range is 125-250
+  radioPackage.throttle = 0;
+  radioPackage.roll = 185;
+  radioPackage.pitch = 185;
   radioPackage.heading = 0;
-  radioPackage.aux1 = 93;
-  radioPackage.aux2 = 93;
-  radioPackage.checksum = 0;
+  radioPackage.aux1 = 185;
+  radioPackage.info = 0;
+  radioPackage.checksum = radioPackage.throttle + radioPackage.roll + radioPackage.pitch + radioPackage.heading + radioPackage.aux1 + radioPackage.info;
   yawControl = 93;
 
-  throttleIn.attach(5);  // attach our stuff!
-  rollIn.attach(6);
-  pitchIn.attach(9);
-  yawIn.attach(10);
-  aux1In.attach(14);
-  aux2In.attach(15);
+  // Initialize our PWM outputs to the MultiWii
+  pinMode(THROTTLE_PIN, OUTPUT);   // sets the pin as output
+  pinMode(ROLL_PIN, OUTPUT);
+  pinMode(PITCH_PIN, OUTPUT);
+  pinMode(YAW_PIN, OUTPUT);
+  pinMode(AUX1_PIN, OUTPUT);
+
+  // Let's see how well we do with a modified Timer0. This fixes the frequency problem with pins 5 and 6, but modifies millis
+  TCCR0A = _BV(COM0A1) | _BV(COM0B1) | _BV(WGM00); 
 
   lastMessageMillis = millis();   // initialize our heartbeat variable to current time
 }
 
 void loop() 
 {
-/*  while (gpss.available() > 0)
+  while (gpss.available() > 0)
   {
     if (gps.encode(gpss.read()))
     {
       Serial.println(F("We encoded our gps stuff"));
     }
   }
-  */
+
 
   // grab barometer information
   float temperature = barometer.bmp085GetTemperature(); //MUST be called first?
@@ -230,7 +216,7 @@ void loop()
     radio.read(&radioPackage, sizeof(radioPackage));
 
     // Verify that the message is valid by literally checking the sum (hahaha)
-    if (radioPackage.checksum != radioPackage.throttle + radioPackage.roll + radioPackage.pitch + radioPackage.heading + radioPackage.aux1 + radioPackage.aux2)
+    if (radioPackage.checksum != radioPackage.throttle + radioPackage.roll + radioPackage.pitch + radioPackage.heading + radioPackage.aux1 + radioPackage.info)
     {
       Serial.println(F("ERR: CheXum Invalid!"));
       break;
@@ -240,24 +226,25 @@ void loop()
     desiredHeading = radioPackage.heading;    // we now have a new desired heading!
     int headingDiff = getHeadingDiff(currHeading, radioPackage.heading);
     if(abs(headingDiff) > 10)  // if difference > 10, then yaw!
-      yawControl = headingDiff/6 + 93;
+      yawControl = headingDiff/6 + 185;
     else
-      yawControl = 93;    // otherwise, don't yaw
+      yawControl = 185;    // otherwise, don't yaw
 
     // write our stuff in if we have a change!
-    throttleIn.write(radioPackage.throttle);
-    rollIn.write(radioPackage.roll);
-    pitchIn.write(radioPackage.pitch);
-    yawIn.write(yawControl);      
-    aux1In.write(radioPackage.aux1);
-    aux2In.write(radioPackage.aux2);   
+    analogWrite(THROTTLE_PIN, radioPackage.throttle);
+    analogWrite(ROLL_PIN, radioPackage.roll);
+    analogWrite(PITCH_PIN, radioPackage.pitch);
+    analogWrite(YAW_PIN, yawControl);
+    analogWrite(AUX1_PIN, radioPackage.aux1);
   }
-  
+
+  // If we've lost connection, stop moving. 
   if (millis() - lastMessageMillis > 500)    // check if it's more than half a second since we last received a radio message
   {
-    rollIn.write(93);     // zero out roll, pitch, and yaw, but keep all other signals the same
-    pitchIn.write(93);
-    yawIn.write(93);   
+    analogWrite(ROLL_PIN, 185);   // zero out roll, pitch, and yaw, but keep all other signals the same
+    analogWrite(PITCH_PIN, 185);
+    analogWrite(YAW_PIN, 185);
+     
     Serial.println(F("ERR: Lost connection!"));
   }
 
@@ -279,8 +266,8 @@ void loop()
     Serial.print(yawControl);
     Serial.print(F("  aux1: "));
     Serial.print(radioPackage.aux1);   
-    Serial.print(F("  aux2: "));
-    Serial.println(radioPackage.aux2);     
+    Serial.print(F("  info: "));
+    Serial.println(radioPackage.info);     
     previousMillis = millis();
   }
 }
