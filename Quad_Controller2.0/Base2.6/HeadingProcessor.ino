@@ -30,24 +30,24 @@ float processHeading(Vector mag)
   process_heading = correctAngle(process_heading);    // correct angle for if its above 2pi or less than 0
   process_heading = process_heading * 180/M_PI;     // convert to degrees
 
-  // Fix magnetometer issue with angles to make it more accurate
-  float fixedHeadingDegrees;
-  if (process_heading >= 1 && process_heading < 240)
-  {
-    fixedHeadingDegrees = map(process_heading, 0, 239, 0, 179);
-  } else
-  if (process_heading >= 240)
-  {
-    fixedHeadingDegrees = map(process_heading, 240, 360, 180, 360);
-  }
-
-  process_heading = fixedHeadingDegrees;
+//  // Fix magnetometer issue with angles to make it more accurate
+//  float fixedHeadingDegrees;
+//  if (process_heading >= 1 && process_heading < 240)
+//  {
+//    fixedHeadingDegrees = map(process_heading, 0, 239, 0, 179);
+//  } else
+//  if (process_heading >= 240)
+//  {
+//    fixedHeadingDegrees = map(process_heading, 240, 360, 180, 360);
+//  }
+//
+//  process_heading = fixedHeadingDegrees;
 
   // check for unusual values
   int testHeading = process_heading;
   int oldHeading = prevHeading;
   int angleChange = ((testHeading - oldHeading + 180 + 360)%360) - 180;   // calculate difference, but keep in mind degrees!
-  if((angleChange > 60) && (antiGlitch < 5))  // if difference > 50 and we haven't been throwing out values too long..
+  if((angleChange > 50) && (antiGlitch < 5))  // if difference > 50 and we haven't been throwing out values too long..
   {
     process_heading = prevHeading;
     antiGlitch++;

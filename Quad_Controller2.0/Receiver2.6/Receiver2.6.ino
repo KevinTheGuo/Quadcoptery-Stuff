@@ -1,5 +1,6 @@
 /* This sketch deals with a receiever, receiving instructions from a hand-controlled controller, which it will try
  *  to match the orientation of. pitch, roll, and heading are all taken into account. altitude coming soon!!
+ *  VERSION 2.6 IS FOR APM COMPATIBILITY. Automatic AUX and YAW control
  */
  
 // includes for i2c and communication stuff
@@ -100,7 +101,18 @@ RF24 radio(7,8);
 byte addresses[][6] = {"trans","recev"};
 
 // our struct
-struct dataPackage{
+struct inputPackage{
+  int throttle;    
+  int roll;
+  int pitch;
+  int yaw;
+  int aux1;
+  int info;   // NOTE: aux2 currently not being forwarded to multiwii. possible use as another control signal?
+  int checksum;
+};
+
+// our struct
+struct outputPackage{
   int throttle;    
   int roll;
   int pitch;
@@ -109,7 +121,13 @@ struct dataPackage{
   int info;   // NOTE: aux2 currently not being forwarded to multiwii. possible use as another control signal?
   int checksum;
 };
-struct dataPackage radioPackage;
+
+// Defined PWM mid-value:
+int midVal = 187;
+
+
+struct inputPackage radioPackageIn;
+struct outputPackage radioPackageOut;
 
 void setup() {
   Serial.begin(38400);
@@ -126,7 +144,7 @@ void setup() {
   radio.setPALevel(RF24_PA_MAX); // we might need to do this or not
 
   // open radio pipes
-//  radio.openWritingPipe(addresses[0]);
+  radio.openWritingPipe(addresses[0]);
   radio.openReadingPipe(1,addresses[1]);
   radio.startListening();
 
@@ -152,13 +170,13 @@ void setup() {
   barometer.bmp085Calibration();        // calibrate our pressure sensor
   
   // and now setup our struct with default values. The range is 125-250
-  radioPackage.throttle = 0;
-  radioPackage.roll = 187;
-  radioPackage.pitch = 187;
-  radioPackage.heading = 0;
-  radioPackage.aux1 = 187;
-  radioPackage.info = 0;
-  radioPackage.checksum = radioPackage.throttle + radioPackage.roll + radioPackage.pitch + radioPackage.heading + radioPackage.aux1 + radioPackage.info;
+  radioPackageIn.throttle = 0;
+  radioPackageIn.roll = 187;
+  radioPackageIn.pitch = 187;
+  radioPackageIn.yaw = 187;
+  radioPackageIn.aux1 = 187;
+  radioPackageIn.info = 0;
+  radioPackageIn.checksum = radioPackageIn.throttle + radioPackageIn.roll + radioPackageIn.pitch + radioPackageIn.yaw + radioPackageIn.aux1 + radioPackageIn.info;
   yawControl = 187;
 
   // Initialize our PWM outputs to the MultiWii
@@ -212,29 +230,23 @@ void loop()
     lastMessageMillis = millis();   // update our timestamp for last message received
     
     //Serial.println(F("We got something!"));
-    radio.read(&radioPackage, sizeof(radioPackage));
+    radio.read(&radioPackageIn, sizeof(radioPackageIn));
 
     // Verify that the message is valid by literally checking the sum (hahaha)
-    if (radioPackage.checksum != radioPackage.throttle + radioPackage.roll + radioPackage.pitch + radioPackage.heading + radioPackage.aux1 + radioPackage.info)
+    if (radioPackageIn.checksum != radioPackageIn.throttle + radioPackageIn.roll + radioPackageIn.pitch + radioPackageIn.yaw + radioPackageIn.aux1 + radioPackageIn.info)
     {
       Serial.println(F("ERR: CheXum Invalid!"));
       break;
     }
 
     // calculate yaw change to match desired heading
-    desiredHeading = radioPackage.heading;    // we now have a new desired heading!
-    int headingDiff = getHeadingDiff(currHeading, radioPackage.heading);
-    if(abs(headingDiff) > 10)  // if difference > 10, then yaw!
-      yawControl = headingDiff/6 + 187;
-    else
-      yawControl = 187;    // otherwise, don't yaw
 
     // write our stuff in if we have a change!
-    analogWrite(THROTTLE_PIN, radioPackage.throttle);
-    analogWrite(ROLL_PIN, radioPackage.roll);
-    analogWrite(PITCH_PIN, radioPackage.pitch);
-    analogWrite(YAW_PIN, yawControl);
-    analogWrite(AUX1_PIN, radioPackage.aux1);
+    analogWrite(THROTTLE_PIN, radioPackageIn.throttle + midVal*0.75);
+    analogWrite(ROLL_PIN, radioPackageIn.roll/2 + midVal);
+    analogWrite(PITCH_PIN, radioPackageIn.pitch/2 + midVal);
+    analogWrite(YAW_PIN, radioPackageIn.yaw + midVal);
+    analogWrite(AUX1_PIN, radioPackageIn.aux1 + midVal*0.75);
   }
 
   // If we've lost connection, stop moving. 
@@ -250,23 +262,19 @@ void loop()
   if((millis() - previousMillis) > 100)   // wait .1 seconds between displaying
   {
     Serial.print(F("throttle: "));
-    Serial.print(radioPackage.throttle);    
+    Serial.print(radioPackageIn.throttle + midVal*0.75);    
     Serial.print(F("  roll: "));
-    Serial.print(radioPackage.roll);
+    Serial.print(radioPackageIn.roll/2 + midVal);
     Serial.print(F("  pitch: "));
-    Serial.print(radioPackage.pitch);
-    Serial.print(F("  desired heading: "));
-    Serial.print(desiredHeading);
+    Serial.print(radioPackageIn.pitch/2 + midVal);
     Serial.print(F("  current heading: "));
     Serial.print(currHeading);
-    Serial.print(F("  heading diff: "));
-    Serial.print(getHeadingDiff(currHeading, desiredHeading));
     Serial.print(F("  yaw: "));
-    Serial.print(yawControl);
+    Serial.print(radioPackageIn.yaw + midVal);
     Serial.print(F("  aux1: "));
-    Serial.print(radioPackage.aux1);   
+    Serial.print(radioPackageIn.aux1 + midVal*0.75);   
     Serial.print(F("  info: "));
-    Serial.println(radioPackage.info);     
+    Serial.println(radioPackageIn.info);     
     previousMillis = millis();
   }
 }

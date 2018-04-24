@@ -40,13 +40,12 @@ float processHeading(Vector mag)
   {
     fixedHeadingDegrees = map(process_heading, 240, 360, 180, 360);
   }
-
   process_heading = fixedHeadingDegrees;
 
   // check for unusual values
-  int testHeading = process_heading;
-  int oldHeading = prevHeading;
-  int angleChange = ((testHeading - oldHeading + 180 + 360)%360) - 180;   // calculate difference, but keep in mind degrees!
+  int processHeadingInt = process_heading;
+  int prevHeadingInt = prevHeading;
+  int angleChange = ((processHeadingInt - prevHeadingInt + 180 + 360)%360) - 180;   // calculate difference, but keep in mind degrees!
   if((angleChange > 60) && (antiGlitch < 5))  // if difference > 50 and we haven't been throwing out values too long..
   {
     process_heading = prevHeading;
